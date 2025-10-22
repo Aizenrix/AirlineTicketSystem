@@ -372,6 +372,7 @@ namespace AirlineTicketSystem
             if (!flights.Any())
             {
                 AnsiConsole.Write(new Markup("[red]Нет доступных рейсов.[/]"));
+                AnsiConsole.Prompt(new TextPrompt<string>("[yellow]Нажмите Enter для продолжения...[/]").AllowEmpty());
                 return;
             }
 
@@ -394,79 +395,32 @@ namespace AirlineTicketSystem
             if (selectedFlight.AvailableSeats <= 0)
             {
                 AnsiConsole.Write(new Markup("[red]На выбранном рейсе нет свободных мест.[/]"));
+                AnsiConsole.Prompt(new TextPrompt<string>("[yellow]Нажмите Enter для продолжения...[/]").AllowEmpty());
                 return;
             }
 
-            // Ввод данных пассажира
+            // Ввод данных пассажира с валидацией
             AnsiConsole.WriteLine();
             AnsiConsole.Write(new Markup("[bold]Данные пассажира:[/]"));
             AnsiConsole.WriteLine();
             
-            var firstName = AnsiConsole.Prompt(
-                new TextPrompt<string>("[green]Имя (или 'назад' для отмены):[/]")
-                    .AllowEmpty());
-            
-            if (string.IsNullOrWhiteSpace(firstName) || firstName.ToLower() == "назад")
-            {
-                AnsiConsole.Write(new Markup("[yellow]Бронирование отменено.[/]"));
-                return;
-            }
+            var firstName = GetValidatedInput("Имя", ValidateName, "Имя должно содержать только буквы и быть не менее 2 символов");
+            if (firstName == null) return;
 
-            var lastName = AnsiConsole.Prompt(
-                new TextPrompt<string>("[green]Фамилия (или 'назад' для отмены):[/]")
-                    .AllowEmpty());
-            
-            if (string.IsNullOrWhiteSpace(lastName) || lastName.ToLower() == "назад")
-            {
-                AnsiConsole.Write(new Markup("[yellow]Бронирование отменено.[/]"));
-                return;
-            }
+            var lastName = GetValidatedInput("Фамилия", ValidateName, "Фамилия должна содержать только буквы и быть не менее 2 символов");
+            if (lastName == null) return;
 
-            var passportNumber = AnsiConsole.Prompt(
-                new TextPrompt<string>("[green]Номер паспорта (или 'назад' для отмены):[/]")
-                    .AllowEmpty());
-            
-            if (string.IsNullOrWhiteSpace(passportNumber) || passportNumber.ToLower() == "назад")
-            {
-                AnsiConsole.Write(new Markup("[yellow]Бронирование отменено.[/]"));
-                return;
-            }
+            var passportNumber = GetValidatedInput("Номер паспорта", ValidatePassportNumber, "Номер паспорта должен содержать только цифры и быть длиной 10 символов");
+            if (passportNumber == null) return;
 
-            var email = AnsiConsole.Prompt(
-                new TextPrompt<string>("[green]Email (или 'назад' для отмены):[/]")
-                    .AllowEmpty());
-            
-            if (string.IsNullOrWhiteSpace(email) || email.ToLower() == "назад")
-            {
-                AnsiConsole.Write(new Markup("[yellow]Бронирование отменено.[/]"));
-                return;
-            }
+            var email = GetValidatedInput("Email", ValidateEmail, "Введите корректный email адрес");
+            if (email == null) return;
 
-            var phoneNumber = AnsiConsole.Prompt(
-                new TextPrompt<string>("[green]Телефон (или 'назад' для отмены):[/]")
-                    .AllowEmpty());
-            
-            if (string.IsNullOrWhiteSpace(phoneNumber) || phoneNumber.ToLower() == "назад")
-            {
-                AnsiConsole.Write(new Markup("[yellow]Бронирование отменено.[/]"));
-                return;
-            }
+            var phoneNumber = GetValidatedInput("Телефон", ValidatePhoneNumber, "Телефон должен содержать только цифры, +, -, (), пробелы и быть не менее 10 символов");
+            if (phoneNumber == null) return;
 
-            var dateOfBirthStr = AnsiConsole.Prompt(
-                new TextPrompt<string>("[green]Дата рождения (dd.MM.yyyy) или 'назад' для отмены:[/]")
-                    .AllowEmpty());
-
-            if (string.IsNullOrWhiteSpace(dateOfBirthStr) || dateOfBirthStr.ToLower() == "назад")
-            {
-                AnsiConsole.Write(new Markup("[yellow]Бронирование отменено.[/]"));
-                return;
-            }
-
-            if (!DateTime.TryParseExact(dateOfBirthStr, "dd.MM.yyyy", null, System.Globalization.DateTimeStyles.None, out var dateOfBirth))
-            {
-                AnsiConsole.Write(new Markup("[red]Неверный формат даты. Бронирование отменено.[/]"));
-                return;
-            }
+            var dateOfBirth = GetValidatedDateOfBirth();
+            if (dateOfBirth == null) return;
 
             // Поиск или создание пассажира
             var passenger = await passengerService.GetPassengerByPassportAsync(passportNumber);
@@ -479,7 +433,7 @@ namespace AirlineTicketSystem
                     PassportNumber = passportNumber,
                     Email = email,
                     PhoneNumber = phoneNumber,
-                    DateOfBirth = dateOfBirth
+                    DateOfBirth = dateOfBirth.Value
                 };
                 passenger = await passengerService.CreatePassengerAsync(passenger);
                 AnsiConsole.Write(new Markup("[green]✅ Новый пассажир добавлен в систему.[/]"));
@@ -1032,6 +986,147 @@ namespace AirlineTicketSystem
                 BookingStatus.Completed => "[blue]Завершено[/]",
                 _ => status.ToString()
             };
+        }
+
+        // Методы валидации
+        private string? GetValidatedInput(string fieldName, Func<string, bool> validator, string errorMessage)
+        {
+            while (true)
+            {
+                var input = AnsiConsole.Prompt(
+                    new TextPrompt<string>($"[green]{fieldName} (или 'назад' для отмены):[/]")
+                        .AllowEmpty());
+
+                if (string.IsNullOrWhiteSpace(input) || input.ToLower() == "назад")
+                {
+                    AnsiConsole.Write(new Markup("[yellow]Бронирование отменено.[/]"));
+                    return null;
+                }
+
+                if (validator(input))
+                {
+                    return input;
+                }
+
+                AnsiConsole.Write(new Markup($"[red]❌ {errorMessage}[/]"));
+                AnsiConsole.WriteLine();
+                
+                var retry = AnsiConsole.Prompt(
+                    new SelectionPrompt<string>()
+                        .Title("[yellow]Что делать?[/]")
+                        .AddChoices(new[]
+                        {
+                            "🔄 Попробовать снова",
+                            "🔙 Назад"
+                        }));
+
+                if (retry == "🔙 Назад")
+                {
+                    AnsiConsole.Write(new Markup("[yellow]Бронирование отменено.[/]"));
+                    return null;
+                }
+            }
+        }
+
+        private DateTime? GetValidatedDateOfBirth()
+        {
+            while (true)
+            {
+                var input = AnsiConsole.Prompt(
+                    new TextPrompt<string>("[green]Дата рождения (dd.MM.yyyy) или 'назад' для отмены:[/]")
+                        .AllowEmpty());
+
+                if (string.IsNullOrWhiteSpace(input) || input.ToLower() == "назад")
+                {
+                    AnsiConsole.Write(new Markup("[yellow]Бронирование отменено.[/]"));
+                    return null;
+                }
+
+                if (DateTime.TryParseExact(input, "dd.MM.yyyy", null, System.Globalization.DateTimeStyles.None, out var dateOfBirth))
+                {
+                    var age = DateTime.Now.Year - dateOfBirth.Year;
+                    if (DateTime.Now.DayOfYear < dateOfBirth.DayOfYear)
+                        age--;
+
+                    if (age < 0)
+                    {
+                        AnsiConsole.Write(new Markup("[red]❌ Дата рождения не может быть в будущем.[/]"));
+                        AnsiConsole.WriteLine();
+                    }
+                    else if (age > 150)
+                    {
+                        AnsiConsole.Write(new Markup("[red]❌ Возраст не может быть больше 150 лет.[/]"));
+                        AnsiConsole.WriteLine();
+                    }
+                    else
+                    {
+                        return dateOfBirth;
+                    }
+                }
+                else
+                {
+                    AnsiConsole.Write(new Markup("[red]❌ Неверный формат даты. Используйте формат dd.MM.yyyy[/]"));
+                    AnsiConsole.WriteLine();
+                }
+
+                var retry = AnsiConsole.Prompt(
+                    new SelectionPrompt<string>()
+                        .Title("[yellow]Что делать?[/]")
+                        .AddChoices(new[]
+                        {
+                            "🔄 Попробовать снова",
+                            "🔙 Назад"
+                        }));
+
+                if (retry == "🔙 Назад")
+                {
+                    AnsiConsole.Write(new Markup("[yellow]Бронирование отменено.[/]"));
+                    return null;
+                }
+            }
+        }
+
+        private bool ValidateName(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name) || name.Length < 2)
+                return false;
+
+            return name.All(c => char.IsLetter(c) || c == '-' || c == ' ');
+        }
+
+        private bool ValidatePassportNumber(string passport)
+        {
+            if (string.IsNullOrWhiteSpace(passport))
+                return false;
+
+            return passport.Length == 10 && passport.All(char.IsDigit);
+        }
+
+        private bool ValidateEmail(string email)
+        {
+            if (string.IsNullOrWhiteSpace(email))
+                return false;
+
+            try
+            {
+                var addr = new System.Net.Mail.MailAddress(email);
+                return addr.Address == email;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private bool ValidatePhoneNumber(string phone)
+        {
+            if (string.IsNullOrWhiteSpace(phone))
+                return false;
+
+            // Удаляем все символы кроме цифр для проверки длины
+            var digitsOnly = new string(phone.Where(char.IsDigit).ToArray());
+            
+            return digitsOnly.Length >= 10 && phone.All(c => char.IsDigit(c) || c == '+' || c == '-' || c == '(' || c == ')' || c == ' ');
         }
     }
 }
